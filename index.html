@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Babel-tongue // char-rnn · rust+wasm</title>
+<style>
+:root {
+  --bg: #050805;
+  --fg: #00ff41;
+  --dim: #008822;
+  --dimmer: #004411;
+  --accent: #00ffaa;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Courier New", "Courier", monospace;
+  min-height: 100vh;
+  position: relative;
+  padding: 1rem;
+  font-size: 14px;
+  line-height: 1.5;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom, transparent 0, transparent 2px,
+    rgba(0, 255, 65, 0.04) 3px, transparent 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.7) 100%);
+  pointer-events: none;
+  z-index: 999;
+}
+.title {
+  text-align: center;
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  padding: 0.6rem;
+  border: 1px solid var(--dim);
+  background: rgba(0, 255, 65, 0.03);
+  text-shadow: 0 0 10px var(--fg);
+  letter-spacing: 3px;
+}
+.panel {
+  border: 1px solid var(--dim);
+  padding: 0.75rem;
+  background: rgba(0, 20, 0, 0.3);
+  margin-bottom: 0.75rem;
+}
+.panel-title {
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--dimmer);
+  padding-bottom: 0.25rem;
+  letter-spacing: 1px;
+}
+textarea, input[type="text"], input[type="number"] {
+  width: 100%;
+  background: #020502;
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  direction: ltr;
+  text-align: left;
+}
+textarea { resize: vertical; min-height: 140px; }
+textarea:focus, input:focus {
+  border-color: var(--fg);
+  box-shadow: 0 0 6px var(--fg);
+}
+button {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--fg);
+  padding: 0.4rem 1.1rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  letter-spacing: 1px;
+  margin-right: 0.4rem;
+  margin-bottom: 0.25rem;
+  transition: all 0.15s;
+  text-shadow: 0 0 4px var(--fg);
+}
+button:hover:not(:disabled) {
+  background: var(--fg);
+  color: var(--bg);
+  box-shadow: 0 0 14px var(--fg);
+}
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: var(--dim);
+  text-shadow: none;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+@media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+.stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.22rem 0;
+  font-size: 0.82rem;
+  border-bottom: 1px dashed var(--dimmer);
+  direction: ltr;
+}
+.stat span:first-child { color: var(--dim); }
+.stat span:last-child { color: var(--accent); }
+#output {
+  background: #000;
+  border: 1px solid var(--dim);
+  padding: 0.6rem;
+  min-height: 140px;
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  direction: ltr;
+  text-align: left;
+}
+#lossCanvas {
+  width: 100%;
+  height: 120px;
+  border: 1px solid var(--dim);
+  background: #000;
+  display: block;
+  margin-top: 0.4rem;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.controls label {
+  font-size: 0.72rem;
+  color: var(--dim);
+  margin-right: 0.2rem;
+}
+.controls input[type="number"] { width: 70px; }
+#loading {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  letter-spacing: 3px;
+  z-index: 2000;
+  color: var(--fg);
+  text-shadow: 0 0 8px var(--fg);
+}
+#loading.hidden { display: none; }
+::-webkit-scrollbar { width: 6px; background: #000; }
+::-webkit-scrollbar-thumb { background: var(--dim); }
+</style>
+</head>
+<body>
+
+<div id="loading">▸ BOOTING WASM CORE...</div>
+
+<div class="title">⌬ BABEL-TONGUE // CHAR-RNN · RUST+WASM ⌬</div>
+
+<div class="grid">
+  <div class="panel">
+    <div class="panel-title">▸ متن آموزش (character-level)</div>
+    <textarea id="text" spellcheck="false"></textarea>
+    <div class="controls" style="margin-top: 0.5rem;">
+      <button id="btnTrain">آموزش</button>
+      <button id="btnStop" disabled>توقف</button>
+      <button id="btnReset">ریست</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">▸ آمار</div>
+    <div class="stat"><span>STATUS</span><span id="statStatus">آماده</span></div>
+    <div class="stat"><span>VOCAB</span><span id="statVocab">-</span></div>
+    <div class="stat"><span>HIDDEN</span><span id="statHidden">-</span></div>
+    <div class="stat"><span>ITER</span><span id="statIter">0</span></div>
+    <div class="stat"><span>LOSS</span><span id="statLoss">-</span></div>
+    <div class="stat"><span>LOSS · smooth</span><span id="statLossSmooth">-</span></div>
+    <canvas id="lossCanvas"></canvas>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">▸ تولید متن</div>
+  <div class="controls" style="margin-bottom: 0.5rem;">
+    <input type="text" id="seed" placeholder="seed..." style="flex: 1; min-width: 180px;" value="To be">
+    <label>TEMP</label>
+    <input type="number" id="temp" value="0.8" step="0.05" min="0.1" max="2">
+    <label>LEN</label>
+    <input type="number" id="len" value="300" step="50" min="20" max="2000">
+    <button id="btnGen">تولید</button>
+  </div>
+  <div id="output"></div>
+</div>
+
+<script type="module">
+import init, { Rnn } from './pkg/babel_tongue.js';
+
+const HID = 64;
+const SEQ_LEN = 25;
+const BATCH = 8;
+const LR = 0.01;
+
+const DEFAULT_TEXT = `To be, or not to be, that is the question:
+Whether 'tis nobler in the mind to suffer
+The slings and arrows of outrageous fortune,
+Or to take arms against a sea of troubles
+And by opposing end them. To die—to sleep,
+No more; and by a sleep to say we end
+The heart-ache and the thousand natural shocks
+That flesh is heir to: 'tis a consummation
+Devoutly to be wish'd. To die, to sleep;
+To sleep, perchance to dream—ay, there's the rub:
+For in that sleep of death what dreams may come,
+When we have shuffled off this mortal coil,
+Must give us pause—there's the respect
+That makes calamity of so long life.`;
+
+let rnn = null;
+let V = 0;
+let charToIdx = {};
+let idxToChar = [];
+let trainText = "";
+let training = false;
+let generating = false;
+let iter = 0;
+let lastLoss = 0;
+let smoothLoss = 0;
+let lossHistory = [];
+
+function buildVocab(text) {
+  const unique = [...new Set(text)].sort();
+  charToIdx = {};
+  idxToChar = unique;
+  unique.forEach((c, i) => { charToIdx[c] = i; });
+  V = unique.length;
+  trainText = text;
+}
+
+function initModel() {
+  rnn = new Rnn(V, HID, 42);
+  rnn.set_lr(LR);
+  iter = 0;
+  lastLoss = 0;
+  smoothLoss = Math.log(V);
+  lossHistory = [];
+  updateStats();
+  drawLoss();
+}
+
+function updateStats() {
+  document.getElementById("statVocab").textContent = V || "-";
+  document.getElementById("statHidden").textContent = HID;
+  document.getElementById("statIter").textContent = iter;
+  document.getElementById("statLoss").textContent = iter > 0 ? lastLoss.toFixed(3) : "-";
+  document.getElementById("statLossSmooth").textContent = iter > 0 ? smoothLoss.toFixed(3) : "-";
+}
+
+async function trainLoop() {
+  if (!rnn || training) return;
+  training = true;
+  document.getElementById("btnTrain").disabled = true;
+  document.getElementById("btnStop").disabled = false;
+  document.getElementById("btnReset").disabled = true;
+  document.getElementById("statStatus").textContent = "در حال آموزش...";
+
+  const hprev = [];
+  for (let b = 0; b < BATCH; b++) hprev.push(new Float32Array(HID));
+
+  const N = trainText.length;
+  if (N < SEQ_LEN + 2) {
+    document.getElementById("statStatus").textContent = "متن کوتاه است";
+    training = false;
+    document.getElementById("btnTrain").disabled = false;
+    document.getElementById("btnStop").disabled = true;
+    document.getElementById("btnReset").disabled = false;
+    return;
+  }
+
+  while (training) {
+    rnn.zero_grad();
+    let totalLoss = 0;
+    for (let b = 0; b < BATCH; b++) {
+      const start = Math.floor(Math.random() * (N - SEQ_LEN - 1));
+      const inputs = new Uint32Array(SEQ_LEN);
+      const targets = new Uint32Array(SEQ_LEN);
+      for (let t = 0; t < SEQ_LEN; t++) {
+        inputs[t] = charToIdx[trainText[start + t]];
+        targets[t] = charToIdx[trainText[start + t + 1]];
+      }
+      totalLoss += rnn.forward_backward(inputs, targets, hprev[b]);
+      hprev[b] = rnn.get_h_last();
+    }
+    rnn.scale_grads(1 / BATCH);
+    rnn.adam_step();
+
+    iter++;
+    lastLoss = totalLoss / BATCH;
+    smoothLoss = iter === 1 ? lastLoss : 0.99 * smoothLoss + 0.01 * lastLoss;
+
+    if (iter % 2 === 0) {
+      lossHistory.push(smoothLoss);
+      if (lossHistory.length > 600) lossHistory.shift();
+      updateStats();
+      drawLoss();
+    }
+
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  document.getElementById("btnTrain").disabled = false;
+  document.getElementById("btnStop").disabled = true;
+  document.getElementById("btnReset").disabled = false;
+  document.getElementById("statStatus").textContent = "متوقف";
+}
+
+function sampleText(seedText, length, temp) {
+  const codes = [];
+  for (const c of seedText) {
+    if (charToIdx[c] !== undefined) codes.push(charToIdx[c]);
+  }
+  if (codes.length === 0) codes.push(0);
+  const outCodes = rnn.sample(new Uint32Array(codes), length, temp);
+  return Array.from(outCodes, c => idxToChar[c]).join("");
+}
+
+async function generate() {
+  if (!rnn || generating || training) return;
+  generating = true;
+  document.getElementById("btnGen").disabled = true;
+
+  const seedText = document.getElementById("seed").value;
+  const temp = Math.max(0.05, parseFloat(document.getElementById("temp").value) || 0.8);
+  const length = Math.max(10, Math.min(3000, parseInt(document.getElementById("len").value) || 200));
+  const out = document.getElementById("output");
+
+  const fullText = sampleText(seedText, length, temp);
+  out.textContent = "";
+
+  const chunk = 3;
+  for (let i = 0; i < fullText.length; i += chunk) {
+    out.textContent += fullText.slice(i, i + chunk);
+    out.scrollTop = out.scrollHeight;
+    if (i % 18 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  document.getElementById("btnGen").disabled = false;
+  generating = false;
+}
+
+function drawLoss() {
+  const canvas = document.getElementById("lossCanvas");
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = 120 * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  const CW = rect.width;
+  const CH = 120;
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.strokeStyle = "#003a0d";
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const y = (CH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(CW, y);
+    ctx.stroke();
+  }
+
+  if (lossHistory.length < 2) return;
+
+  let maxL = -Infinity, minL = Infinity;
+  for (const v of lossHistory) {
+    if (v > maxL) maxL = v;
+    if (v < minL) minL = v;
+  }
+  if (maxL - minL < 0.01) { maxL += 0.1; minL -= 0.1; }
+
+  ctx.strokeStyle = "#00ff41";
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = "#00ff41";
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  for (let i = 0; i < lossHistory.length; i++) {
+    const x = (i / (lossHistory.length - 1)) * CW;
+    const y = CH - 6 - ((lossHistory[i] - minL) / (maxL - minL)) * (CH - 14);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "#008822";
+  ctx.font = "11px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText(maxL.toFixed(2), 4, 12);
+  ctx.fillText(minL.toFixed(2), 4, CH - 4);
+}
+
+async function boot() {
+  await init();
+  document.getElementById("loading").classList.add("hidden");
+
+  document.getElementById("text").value = DEFAULT_TEXT;
+  buildVocab(DEFAULT_TEXT);
+  initModel();
+
+  document.getElementById("btnTrain").addEventListener("click", () => {
+    const text = document.getElementById("text").value;
+    if (text.length < SEQ_LEN + 5) {
+      alert("متن خیلی کوتاه است — حداقل ۳۰ کاراکتر بده");
+      return;
+    }
+    buildVocab(text);
+    initModel();
+    trainLoop();
+  });
+
+  document.getElementById("btnStop").addEventListener("click", () => {
+    training = false;
+  });
+
+  document.getElementById("btnReset").addEventListener("click", () => {
+    if (training) return;
+    const text = document.getElementById("text").value || DEFAULT_TEXT;
+    buildVocab(text);
+    initModel();
+    document.getElementById("output").textContent = "";
+  });
+
+  document.getElementById("btnGen").addEventListener("click", generate);
+
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawLoss, 100);
+  });
+}
+
+boot();
+</script>
+</body>
+</html>
