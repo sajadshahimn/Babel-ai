@@ -172,6 +172,15 @@ button:disabled {
   text-shadow: 0 0 8px var(--fg);
 }
 #loading.hidden { display: none; }
+#loading.error { 
+  color: #ff3333; 
+  text-shadow: 0 0 8px #ff3333; 
+  font-size: 0.9rem; 
+  padding: 1rem; 
+  text-align: center;
+  flex-direction: column;
+  gap: 10px;
+}
 ::-webkit-scrollbar { width: 6px; background: #000; }
 ::-webkit-scrollbar-thumb { background: var(--dim); }
 </style>
@@ -219,7 +228,8 @@ button:disabled {
 </div>
 
 <script type="module">
-import init, { Rnn } from './pkg/babel_tongue.js';
+// ایمپورت دقیق بر اساس نام پکیج در Cargo.toml (babel-ai)
+import init, { Rnn } from './pkg/babel_ai.js';
 
 const HID = 64;
 const SEQ_LEN = 25;
@@ -430,43 +440,52 @@ function drawLoss() {
 }
 
 async function boot() {
-  await init();
-  document.getElementById("loading").classList.add("hidden");
+  const loading = document.getElementById("loading");
+  try {
+    // دادن مسیر دقیق فایل wasm برای جلوگیری از خطا
+    await init('./pkg/babel_ai_bg.wasm');
+    loading.classList.add("hidden");
 
-  document.getElementById("text").value = DEFAULT_TEXT;
-  buildVocab(DEFAULT_TEXT);
-  initModel();
-
-  document.getElementById("btnTrain").addEventListener("click", () => {
-    const text = document.getElementById("text").value;
-    if (text.length < SEQ_LEN + 5) {
-      alert("متن خیلی کوتاه است — حداقل ۳۰ کاراکتر بده");
-      return;
-    }
-    buildVocab(text);
+    document.getElementById("text").value = DEFAULT_TEXT;
+    buildVocab(DEFAULT_TEXT);
     initModel();
-    trainLoop();
-  });
 
-  document.getElementById("btnStop").addEventListener("click", () => {
-    training = false;
-  });
+    document.getElementById("btnTrain").addEventListener("click", () => {
+      const text = document.getElementById("text").value;
+      if (text.length < SEQ_LEN + 5) {
+        alert("متن خیلی کوتاه است — حداقل ۳۰ کاراکتر بده");
+        return;
+      }
+      buildVocab(text);
+      initModel();
+      trainLoop();
+    });
 
-  document.getElementById("btnReset").addEventListener("click", () => {
-    if (training) return;
-    const text = document.getElementById("text").value || DEFAULT_TEXT;
-    buildVocab(text);
-    initModel();
-    document.getElementById("output").textContent = "";
-  });
+    document.getElementById("btnStop").addEventListener("click", () => {
+      training = false;
+    });
 
-  document.getElementById("btnGen").addEventListener("click", generate);
+    document.getElementById("btnReset").addEventListener("click", () => {
+      if (training) return;
+      const text = document.getElementById("text").value || DEFAULT_TEXT;
+      buildVocab(text);
+      initModel();
+      document.getElementById("output").textContent = "";
+    });
 
-  let resizeTimer;
-  window.addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(drawLoss, 100);
-  });
+    document.getElementById("btnGen").addEventListener("click", generate);
+
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(drawLoss, 100);
+    });
+  } catch (err) {
+    loading.classList.remove("hidden");
+    loading.classList.add("error");
+    loading.innerHTML = "<div>⛔ ERROR</div><div style='font-size:0.8rem; margin-top:5px;'>" + err.message + "</div>";
+    console.error("WASM Init Error:", err);
+  }
 }
 
 boot();
