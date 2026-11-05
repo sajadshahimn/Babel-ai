@@ -17,12 +17,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-      - run: wasm-pack build --target web --release
-      - run: |
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build WASM
+        run: wasm-pack build --target web --release
+      - name: Prepare dist
+        run: |
           mkdir -p dist
           cp index.html dist/
           cp -r pkg dist/
+          touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
